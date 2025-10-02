@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>Нікус Крипто-Гаманець</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<style>
+body {
+  background: #1a1200;
+  color: #ffd93b;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+}
+#app {
+  max-width: 900px;
+  margin: 20px auto;
+  padding: 15px;
+  background: #331f00;
+  border-radius: 10px;
+  box-shadow: 0 0 15px #ffda00aa;
+}
+h1, h2 {
+  text-align: center;
+  color: #ffe066;
+  text-shadow: 0 0 5px #ffd93b;
+}
+.balances {
+  display:flex;
+  justify-content:center;
+  gap:20px;
+  margin-bottom:20px;
+  flex-wrap: wrap;
+}
+.card {
+  background:#442f00;
+  padding:15px;
+  border-radius:8px;
+  width:160px;
+  text-align:center;
+  box-shadow: 0 0 8px #ffda00aa;
+}
+.card h3 {
+  margin:5px 0;
+}
+.card p {
+  font-size:1.5em;
+  margin:5px 0;
+  color: #ffdd55;
+}
+input, select {
+  width:100%;
+  padding:10px;
+  margin:7px 0 15px 0;
+  border-radius:5px;
+  border:2px solid #ffd93b;
+  background:#fff6b3;
+  font-weight:bold;
+  color:#4a3b00;
+  box-sizing:border-box;
+}
+input:focus {
+  outline:none;
+  border-color:#e6c200;
+  box-shadow:0 0 8px #ffd93b;
+}
+button {
+  background: linear-gradient(45deg, #ffd93b, #e6c200);
+  border:none;
+  padding:10px 20px;
+  margin:5px 0;
+  border-radius:5px;
+  cursor:pointer;
+  color:#4a3b00;
+  font-weight:bold;
+  box-shadow:0 4px 6px #b38f00;
+  transition: background 0.3s ease;
+}
+button:hover {
+  background: linear-gradient(45deg, #ffe066, #ffdd55);
+  color:#442d00;
+}
+#videoPreview {
+  width:480px;
+  height:360px;
+  border:1px solid #ffda00;
+  margin-top:10px;
+  display:none;
+  border-radius:8px;
+}
+canvas {
+  background:#fff6b3;
+  border-radius:8px;
+  margin-top:20px;
+}
+.alert {
+  background:#4a3b00;
+  border:1px solid #ffd93b;
+  padding:8px;
+  border-radius:5px;
+  margin:10px auto;
+  max-width:400px;
+  text-align:center;
+  color:#ffdd55;
+  font-weight:bold;
+}
+</style>
+</head>
+<body>
+<div id="app">
+<h1>Нікус Крипто-Гаманець</h1>
+
+<!-- Баланси -->
+<div class="balances">
+  <div class="card">
+    <h3>Нікуси</h3>
+    <p id="bal-nikus">0</p>
+  </div>
+  <div class="card">
+    <h3>Х-коін</h3>
+    <p id="bal-xcoin">0</p>
+    <small>Курс: <span id="price-xcoin">0</span></small>
+  </div>
+  <div class="card">
+    <h3>Орех</h3>
+    <p id="bal-oreh">0</p>
+    <small>Курс: <span id="price-oreh">0</span></small>
+  </div>
+</div>
+
+<h2>Купівля крипти</h2>
+<select id="cryptoSelect">
+  <option value="xcoin">Х-коін</option>
+  <option value="oreh">Орех</option>
+</select>
+<input type="number" id="amount" placeholder="Скільки купити/продати">
+<button onclick="buyCrypto()">Купити</button>
+<button onclick="sellCrypto()">Продати</button>
+
+<h2>Ввести промокод</h2>
+<input type="text" id="promoInput" placeholder="Введи промокод">
+<button onclick="applyPromo()">Додати Нікусів</button>
+
+<h2>Сканер QR (списання Нікусів)</h2>
+<button onclick="startScanner()">Запустити камеру</button>
+<button onclick="stopScanner()">Зупинити камеру</button>
+<video id="videoPreview"></video>
+<canvas id="canvas" style="display:none;"></canvas>
+<div id="scanStatus" class="alert"></div>
+
+<h3>Або завантаж фото QR</h3>
+<input type="file" id="fileInput" accept="image/*"/>
+<div id="fileResult" class="alert"></div>
+
+<h2>Графік курсу</h2>
+<canvas id="priceChart" width="600" height="300"></canvas>
+</div>
+
+<script>
+// === BALANCES & LOCALSTORAGE ===
+let balances = {
+  nikus: parseFloat(localStorage.getItem("bal_nikus")) || 100,
+  xcoin: parseFloat(localStorage.getItem("bal_xcoin")) || 0,
+  oreh: parseFloat(localStorage.getItem("bal_oreh")) || 0
+};
+
+// Промокоди для поповнення
+const promoCodes = { "promo2_5":2.5,"promo5":5,"promo10":10,"promo20":20,"promo35":35,"promo50":50,"promo100":100 };
+
+// QR-коди для списання (одноразові)
+let qrCodes = { qr2_5:2.5, qr5:5, qr10:10, qr20:20, qr35:35, qr50:50, qr100:100 };
+
+// === PRICES ===
+const dailyPrices = [
+  {xcoin:60, oreh:15},{xcoin:61, oreh:16},{xcoin:62, oreh:13},{xcoin:63, oreh:17},{xcoin:50, oreh:17},
+  {xcoin:40, oreh:18},{xcoin:55, oreh:17},{xcoin:61, oreh:19},{xcoin:60, oreh:19},{xcoin:69, oreh:20},
+  {xcoin:70, oreh:9},{xcoin:71, oreh:8},{xcoin:60, oreh:11},{xcoin:75, oreh:15},{xcoin:74, oreh:22},
+  {xcoin:59, oreh:23},{xcoin:76, oreh:23},{xcoin:77, oreh:24},{xcoin:68, oreh:16},{xcoin:73, oreh:20},
+  {xcoin:63, oreh:25},{xcoin:65, oreh:25},{xcoin:67, oreh:26},{xcoin:63, oreh:27},{xcoin:62, oreh:9},
+  {xcoin:77, oreh:10},{xcoin:86, oreh:11},{xcoin:81, oreh:9},{xcoin:74, oreh:29},{xcoin:69, oreh:20}
+];
+let dayIndex = parseInt(localStorage.getItem("dayIndex")) || 0;
+let prices = { xcoin: dailyPrices[dayIndex].xcoin, oreh: dailyPrices[dayIndex].oreh };
+
+// === GRAPH ===
+const ctx = document.getElementById('priceChart').getContext('2d');
+const priceChart = new Chart(ctx, {
+  type:'line',
+  data:{labels:[], datasets:[
+    {label:'Х-коін', data:[], borderColor:'rgba(75,192,192,1)', tension:0.2},
+    {label:'Орех', data:[], borderColor:'rgba(192,75,192,1)', tension:0.2}
+  ]},
+  options:{responsive:true, plugins:{legend:{labels:{color:'black'}}}, scales:{x:{ticks:{color:'black'}}, y:{ticks:{color:'black'}}}}
+});
+
+// === REFRESH BALANCES ===
+function refreshBalances(){
+  document.getElementById("bal-nikus").innerText = balances.nikus.toFixed(2);
+  document.getElementById("bal-xcoin").innerText = balances.xcoin.toFixed(2);
+  document.getElementById("bal-oreh").innerText = balances.oreh.toFixed(2);
+  localStorage.setItem("bal_nikus", balances.nikus);
+  localStorage.setItem("bal_xcoin", balances.xcoin);
+  localStorage.setItem("bal_oreh", balances.oreh);
+}
+
+// === BUY CRYPTO ===
+function buyCrypto(){
+  let token = document.getElementById("cryptoSelect").value;
+  let amount = parseFloat(document.getElementById("amount").value);
+  if(!amount || amount<=0) return alert("Вкажіть кількість!");
+  let cost = amount*prices[token];
+  if(balances.nikus >= cost){
+    balances.nikus -= cost;
+    balances[token] += amount;
+    refreshBalances();
+  }else alert("Недостатньо Нікусів!");
+}
+
+// === SELL CRYPTO ===
+function sellCrypto(){
+  let token = document.getElementById("cryptoSelect").value;
+  let amount = parseFloat(document.getElementById("amount").value);
+  if(!amount || amount<=0) return alert("Вкажіть кількість!");
+  if(balances[token]>=amount){
+    balances[token]-=amount;
+    balances.nikus += amount*prices[token];
+    refreshBalances();
+    alert("Продано "+amount+" "+token+" за "+(amount*prices[token]).toFixed(2)+" Нікусів");
+  } else alert("Недостатньо крипти для продажу!");
+}
+
+// === APPLY PROMO ===
+function applyPromo(){
+  let code = document.getElementById("promoInput").value.trim();
+  if(promoCodes[code]){
+    balances.nikus += promoCodes[code];
+    refreshBalances();
+    alert('Додано ' + promoCodes[code] + ' Нікусів!');
+  } else alert('Промокод недійсний');
+}
+
+// === SCAN QR (списання) ===
+let video = document.getElementById('videoPreview');
+let canvas = document.getElementById('canvas');
+let ctxCanvas = canvas.getContext('2d');
+let videoStream = null;
+let scanInterval = null;
+
+function startScanner(){
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    alert('Камера недоступна.');
+    return;
+  }
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}})
+  .then(stream=>{
+    videoStream = stream;
+    video.srcObject = stream;
+    video.play();
+    video.style.display='block';
+    scanInterval = setInterval(scanFrame, 300);
+  }).catch(err=>{
+    console.error(err);
+    alert('Не вдалося отримати доступ до камери: ' + err.message);
+  });
+}
+
+function stopScanner(){
+  if(scanInterval){ clearInterval(scanInterval); scanInterval=null; }
+  if(videoStream){
+    videoStream.getTracks().forEach(t=>t.stop());
+    videoStream=null;
+  }
+  video.srcObject=null;
+  video.style.display='none';
+}
+
+function scanFrame(){
+  if(video.readyState !== video.HAVE_ENOUGH_DATA) return;
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctxCanvas.drawImage(video,0,0,canvas.width,canvas.height);
+  const imgData = ctxCanvas.getImageData(0,0,canvas.width,canvas.height);
+  const code = jsQR(imgData.data,imgData.width,imgData.height);
+  if(code){
+    const data = code.data;
+    if(qrCodes[data]){ 
+      processScannedPayload(data);
+    }
+  }
+}
+
+function processScannedPayload(data){
+  if(qrCodes[data]){
+    let val = qrCodes[data];
+    if(balances.nikus>=val){
+      balances.nikus-=val;
+      refreshBalances();
+      alert('Списано '+val+' Нікусів!');
+      delete qrCodes[data];
+    } else alert('Недостатньо Нікусів!');
+  } else console.log('Невірний або використаний QR-код!');
+}
+
+// === FILE FALLBACK ===
+document.getElementById('fileInput').addEventListener('change', e=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    const img = new Image();
+    img.onload = ()=>{
+      canvas.width=img.width; canvas.height=img.height;
+      ctxCanvas.drawImage(img,0,0);
+      const imgData=ctxCanvas.getImageData(0,0,canvas.width,canvas.height);
+      const code=jsQR(imgData.data,imgData.width,imgData.height);
+      if(code && code.data) processScannedPayload(code.data);
+      else document.getElementById('fileResult').innerText='QR не знайдено на зображенні';
+    };
+    img.src=ev.target.result;
+  };
+  reader.readAsDataURL(f);
+});
+
+// === DAILY PRICE UPDATE ===
+function updateDailyPrice(){
+  dayIndex=(dayIndex+1)%dailyPrices.length;
+  prices.xcoin=dailyPrices[dayIndex].xcoin;
+  prices.oreh=dailyPrices[dayIndex].oreh;
+  localStorage.setItem('dayIndex',dayIndex);
+  document.getElementById("price-xcoin").innerText = prices.xcoin.toFixed(2);
+  document.getElementById("price-oreh").innerText = prices.oreh.toFixed(2);
+  refreshBalances();
+  updateChart("xcoin",prices.xcoin);
+  updateChart("oreh",prices.oreh);
+}
+
+// Старт авто-оновлення щодня о 12:00
+function scheduleDailyUpdate(){
+  const now = new Date();
+  const nextNoon = new Date();
+  nextNoon.setHours(12,0,0,0);
+  if(now>nextNoon) nextNoon.setDate(nextNoon.getDate()+1);
+  const timeout=nextNoon-now;
+  setTimeout(()=>{
+    updateDailyPrice();
+    setInterval(updateDailyPrice,24*60*60*1000);
+  },timeout);
+}
+
+// === INIT ===
+refreshBalances();
+updateChart("xcoin",prices.xcoin);
+updateChart("oreh",prices.oreh);
+scheduleDailyUpdate();
+</script>
+</body>
+</html>
