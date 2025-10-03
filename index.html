@@ -299,7 +299,8 @@ function processScannedPayload(data){
       refreshBalances();
       alert('Списано '+val+' Нікусів!');
       delete qrCodes[data];
-  } else console.log('Невірний або використаний QR-код!');
+     } else alert('Недостатньо Нікусів!');
+    } else console.log('Невірний або використаний QR-код!');
 }
 
 // === FILE FALLBACK ===
