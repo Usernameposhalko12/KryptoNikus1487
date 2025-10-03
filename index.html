@@ -335,7 +335,14 @@ function updateDailyPrice(){
   updateChart("xcoin",prices.xcoin);
   updateChart("oreh",prices.oreh);
 }
-
+function updateChart(token, value) {
+  let dataset = priceChart.data.datasets.find(d => 
+    d.label === (token === "xcoin" ? "Х-коін" : "Орех")
+  );
+  priceChart.data.labels.push(new Date().toLocaleTimeString());
+  dataset.data.push(value);
+  priceChart.update();
+}
 // Старт авто-оновлення щодня о 12:00
 function scheduleDailyUpdate(){
   const now = new Date();
@@ -351,9 +358,11 @@ function scheduleDailyUpdate(){
 
 // === INIT ===
 refreshBalances();
+document.getElementById("price-xcoin").innerText = prices.xcoin.toFixed(2);
+document.getElementById("price-oreh").innerText = prices.oreh.toFixed(2);
 updateChart("xcoin",prices.xcoin);
 updateChart("oreh",prices.oreh);
-scheduleDailyUpdate();
+  scheduleDailyUpdate();
 </script>
 </body>
 </html>
